@@ -74,7 +74,10 @@ def main(args):
     logger.info("Creating model...")
     task = TrainingTask(cfg, evaluator)
 
-    ckpt = torch.load(args.model)
+    if cfg.device.gpu_ids == -1:
+        ckpt = torch.load(args.model, map_location=torch.device('cpu'))
+    else:
+        ckpt = torch.load(args.model)
     if "pytorch-lightning_version" not in ckpt:
         warnings.warn(
             "Warning! Old .pth checkpoint is deprecated. "
@@ -84,8 +87,8 @@ def main(args):
     task.load_state_dict(ckpt["state_dict"])
 
     if cfg.device.gpu_ids == -1:
-        logger.info("Using CPU training")
-        accelerator, devices = "cpu", None
+        logger.info("Using CPU testing")
+        accelerator, devices = "cpu", min(1, os.cpu_count() // 4)
     else:
         accelerator, devices = "gpu", cfg.device.gpu_ids
 
