@@ -115,7 +115,7 @@ def main(args):
         logger.info("Using CPU training")
         accelerator, devices, strategy, precision = (
             "cpu",
-            None,
+            min(1, os.cpu_count() // 4),
             "auto",
             cfg.device.precision,
         )
@@ -127,7 +127,7 @@ def main(args):
             cfg.device.precision,
         )
 
-    if devices and len(devices) > 1:
+    if devices and isinstance(devices, list) and len(devices) > 1:
         strategy = "ddp"
         env_utils.set_multi_processing(distributed=True)
 
