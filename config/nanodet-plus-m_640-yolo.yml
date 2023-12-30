@@ -93,8 +93,8 @@ data:
     pipeline:
       normalize: [[103.53, 116.28, 123.675], [57.375, 57.12, 58.395]]
 device:
-  gpu_ids: -1
-  workers_per_gpu: 1
+  gpu_ids: [0]
+  workers_per_gpu: 4
   batchsize_per_gpu: 16
 schedule:
 #  resume:
