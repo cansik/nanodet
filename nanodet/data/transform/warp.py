@@ -22,8 +22,15 @@ import numpy as np
 
 def get_flip_matrix(prob=0.5):
     F = np.eye(3)
+
+    # horizontal flip
     if random.random() < prob:
         F[0, 0] = -1
+
+    # vertical flip
+    if random.random() < prob:
+        F[1, 1] = -1
+
     return F
 
 
