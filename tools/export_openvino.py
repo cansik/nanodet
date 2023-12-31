@@ -23,10 +23,13 @@ from pathlib import Path
 import nncf
 import openvino as ov
 import torch
+from openvino import Layout
+from openvino._pyopenvino.preprocess import PrePostProcessor
 
 from nanodet.data.collate import naive_collate
 from nanodet.data.dataset import build_dataset
 from nanodet.util import cfg, load_config
+from tools import export_onnx
 
 
 def parse_args():
@@ -68,18 +71,19 @@ if __name__ == "__main__":
     # export onnx model
     save_dir = Path(cfg.save_dir)
     onnx_model_path = save_dir.joinpath(f"{save_dir.name}.onnx")
-    # export_onnx.main(cfg, model_path, str(onnx_model_path), input_shape)
+    export_onnx.main(cfg, model_path, str(onnx_model_path), input_shape)
 
     # convert onnx to openvino
     mean_values, scale_values = cfg.data.train.pipeline.normalize
 
-    ov_model = ov.convert_model(onnx_model_path)
+    ov_model = ov.convert_model(onnx_model_path, input=[1, 3, input_shape[1], input_shape[0]])
 
     # add pre-processing step
-    # ppp = PrePostProcessor(ov_model)
-    # pp_input = ppp.input(0)
-    # pp_input.preprocess().mean(mean_values).scale(scale_values)
-    # model = ppp.build()
+    ppp = PrePostProcessor(ov_model)
+    pp_input = ppp.input(0)
+    pp_input.model().set_layout(Layout("NCHW"))
+    pp_input.preprocess().mean(mean_values).scale(scale_values)
+    ov_model = ppp.build()
 
     # save ov model
     ov_model_path = save_dir.joinpath(f"{save_dir.name}.xml")
