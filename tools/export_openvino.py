@@ -42,9 +42,6 @@ def parse_args():
         "--model_path", type=str, default=None, help="Path to .ckpt model."
     )
     parser.add_argument(
-        "--out_path", type=str, default="./", help="Openvino model output path."
-    )
-    parser.add_argument(
         "--input_shape", type=str, default=None, help="Model intput shape."
     )
     parser.add_argument(
@@ -57,7 +54,6 @@ if __name__ == "__main__":
     args = parse_args()
     cfg_path = args.cfg_path
     model_path = args.model_path
-    out_path = args.out_path
     input_shape = args.input_shape
     load_config(cfg, cfg_path)
     if input_shape is None:
