@@ -45,7 +45,7 @@ def parse_args():
         "--input_shape", type=str, default=None, help="Model intput shape."
     )
     parser.add_argument(
-        "--nncf", action="store_true", help="Run NNCF."
+        "--nncf", action="store_true", help="Run NNCF (Neural Network Compression Framework)."
     )
     return parser.parse_args()
 
