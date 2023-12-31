@@ -1,11 +1,53 @@
 import argparse
 import os
+import time
 from pathlib import Path
 from typing import Union, List
 
 import cv2
 import numpy as np
 import openvino as ov
+from tqdm import tqdm
+
+
+def current_millis() -> int:
+    return time.time_ns() // 1_000_000
+
+
+class Watch:
+    def __init__(self, name: str = "Watch"):
+        self.name = name
+        self.start_time: int = 0
+        self.end_time: int = 0
+        self.running = False
+
+    def start(self):
+        self.start_time = current_millis()
+        self.running = True
+
+    def stop(self):
+        self.end_time = current_millis()
+        self.running = False
+
+    def elapsed(self) -> int:
+        if self.running:
+            return current_millis() - self.start_time
+        return self.end_time - self.start_time
+
+    def time_str(self, time_format: str = "%Hh %Mm %Ss {}ms") -> str:
+        delta = self.elapsed()
+        return time.strftime(time_format.format(delta % 1000), time.gmtime(delta / 1000.0))
+
+    def print(self):
+        print(f"{self.name}: {self.time_str()}")
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+        self.print()
 
 
 def fast_exp(x):
@@ -49,25 +91,29 @@ class NanoDet:
         self.strides = [8, 16, 32, 64]
         self.input_size = (self.input_shape[3], self.input_shape[2])
 
+        self.center_priors = generate_grid_center_priors(self.input_size[1], self.input_size[0], self.strides)
+
     def preprocess(self, image: np.ndarray) -> np.ndarray:
         return cv2.dnn.blobFromImage(image, 1.0, self.input_size, (0, 0, 0), swapRB=True, crop=False)
 
     def detect(self, image: np.ndarray, score_threshold: float, nms_threshold: float):
-        input_data = self.preprocess(image)
+        with Watch("pre-processing"):
+            input_data = self.preprocess(image)
 
-        infer_request = self.compiled_model.create_infer_request()
-        input_tensor = ov.Tensor(array=input_data, shared_memory=True)
-        infer_request.set_input_tensor(input_tensor)
+        with Watch("inference"):
+            infer_request = self.compiled_model.create_infer_request()
+            input_tensor = ov.Tensor(array=input_data, shared_memory=True)
+            infer_request.set_input_tensor(input_tensor)
 
-        infer_request.start_async()
-        infer_request.wait()
+            infer_request.start_async()
+            infer_request.wait()
 
-        output_tensor = infer_request.get_output_tensor()
-        output = output_tensor.data
+            output_tensor = infer_request.get_output_tensor()
+            output = output_tensor.data
 
-        center_priors = generate_grid_center_priors(self.input_size[1], self.input_size[0], self.strides)
-        results = [[] for _ in range(self.num_class)]
-        self.decode_infer(output, center_priors, score_threshold, results)
+        with Watch("post-processing"):
+            results = [[] for _ in range(self.num_class)]
+            self.decode_infer(output, self.center_priors, score_threshold, results)
 
         dets = []
         for cls_results in results:
@@ -95,9 +141,9 @@ class NanoDet:
                     cur_label = label
             if score > threshold:
                 bbox_pred = pred[0, idx, self.num_class:]
-                results[cur_label].append(self.disPred2Bbox(bbox_pred, cur_label, score, ct_x, ct_y, stride))
+                results[cur_label].append(self.dis_pred_to_bbox(bbox_pred, cur_label, score, ct_x, ct_y, stride))
 
-    def disPred2Bbox(self, dfl_det, label, score, x, y, stride):
+    def dis_pred_to_bbox(self, dfl_det, label, score, x, y, stride):
         ct_x, ct_y = x * stride, y * stride
         dis_pred = [0] * 4
         for i in range(4):
@@ -147,17 +193,32 @@ def annotate_detections(image, detections, color=(0, 0, 255)):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("model", type=str, help="Path to the openvino model.")
-    parser.add_argument("image", type=str, help="Path to the image.")
+    parser.add_argument("input", type=str, help="Path to the image.")
     args = parser.parse_args()
 
     nanodet = NanoDet(args.model)
-    image = cv2.imread(args.image)
-    detections = nanodet.detect(image, 0.2, 0.4)
 
-    annotate_detections(image, detections)
+    input_path = Path(args.input)
 
-    cv2.imshow("Results", image)
-    cv2.waitKey(0)
+    image_paths: List[Path] = []
+    if input_path.is_file():
+        image_paths.append(input_path)
+    else:
+        image_paths += list(input_path.glob("*.png"))
+        image_paths += list(input_path.glob("*.jpeg"))
+        image_paths += list(input_path.glob("*.jpg"))
+        sorted(image_paths)
+
+    for image_path in tqdm(image_paths, desc="Inference"):
+        image = cv2.imread(str(image_path))
+
+        with Watch(f"Total ({image_path.name})"):
+            detections = nanodet.detect(image, 0.1, 0.1)
+
+        annotate_detections(image, detections)
+
+        cv2.imshow(f"Result", image)
+        cv2.waitKey(0)
 
     exit(0)
 
