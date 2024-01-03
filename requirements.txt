@@ -1,11 +1,13 @@
 Cython
 imagesize
 matplotlib
+nncf
 numpy
 omegaconf>=2.0.1
 onnx
 onnx-simplifier
 opencv-python
+openvino
 pyaml
 pycocotools
 pytorch-lightning>=2.0.0
